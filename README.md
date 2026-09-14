@@ -126,17 +126,12 @@ XNCAgent-go/
 
 **二期（一期绿灯后）**：Promotion 独立进程、Recommend + Profile、Risk / AB、三层对账自动化、K8s HPA。
 
-## 推送到 GitHub
+## 远程仓库
 
-远程仓库为私有仓 [`JerryDtj/XNCAgent-go`](https://github.com/JerryDtj/XNCAgent-go)。
+私有仓已存在：[JerryDtj/XNCAgent-go](https://github.com/JerryDtj/XNCAgent-go)。后续提交后执行：
 
 ```bash
-# 远程已存在时
-git remote add origin git@github.com:JerryDtj/XNCAgent-go.git
-git push -u origin main
-
-# 或用 GitHub CLI 新建私有仓再推送
-gh repo create XNCAgent-go --private --source=. --remote=origin --push
+git push origin main
 ```
 
 请勿提交 `.env` 或生产密钥。compose 里的 `xnc123` 只用于本地演示。
