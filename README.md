@@ -128,16 +128,15 @@ XNCAgent-go/
 
 ## 推送到 GitHub
 
-```bash
-git add .
-git commit -m "feat: 初始化 XNCAgent-go 微服务骨架与文档"
+远程仓库为私有仓 [`JerryDtj/XNCAgent-go`](https://github.com/JerryDtj/XNCAgent-go)。
 
+```bash
 # 远程已存在时
 git remote add origin git@github.com:JerryDtj/XNCAgent-go.git
 git push -u origin main
 
-# 或用 GitHub CLI 新建公开仓再推送
-gh repo create XNCAgent-go --public --source=. --remote=origin --push
+# 或用 GitHub CLI 新建私有仓再推送
+gh repo create XNCAgent-go --private --source=. --remote=origin --push
 ```
 
 请勿提交 `.env` 或生产密钥。compose 里的 `xnc123` 只用于本地演示。
