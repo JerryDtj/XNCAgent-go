@@ -1,18 +1,39 @@
 package main
 
 import (
-	"net/http"
+	"fmt"
+	"log"
 
+	"github.com/JerryDtj/XNCAgent-go/internal/config"
+	"github.com/JerryDtj/XNCAgent-go/internal/database"
+	"github.com/JerryDtj/XNCAgent-go/internal/middleware"
+	"github.com/JerryDtj/XNCAgent-go/internal/user"
+	"github.com/JerryDtj/XNCAgent-go/pkg/response"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("load config: %v", err)
+	}
+
+	db, err := database.Open(cfg.Database)
+	if err != nil {
+		log.Fatalf("open database: %v", err)
+	}
+	defer database.Close(db)
+
 	router := gin.Default()
+	router.Use(middleware.CORS(cfg.Server.CORSOrigins))
+	router.Use(middleware.JWT(cfg.JWT.Secret))
 	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "success",
-			"code":    0,
-		})
+		response.OK(c, gin.H{"status": "up"})
 	})
-	router.Run(":8080")
+	user.RegisterRoutes(router, db, cfg.JWT.Secret)
+
+	addr := fmt.Sprintf(":%d", cfg.Server.Port)
+	if err := router.Run(addr); err != nil {
+		log.Fatal(err)
+	}
 }

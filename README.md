@@ -13,10 +13,10 @@ XNCAgent 是「小喜子」的专属 Agent 项目：一名戏精附体的赛博�
 
 ## 当前状态
 
-本仓目前是 **一期骨架 + 本地基础设施**，业务进程尚未实现：
+本仓目前是 **一期骨架 + 本地基础设施**：
 
-- 已有：`cmd/` / `internal/` / `pkg/` 目录规划、`deploy/docker-compose.yaml`、`deploy/init.sql`
-- 没有：`main.go`、gRPC proto、业务镜像；**还不能 `go run`**
+- 已有：`GET /health`、注册登录 JWT（`make run`）、统一 JSON 信封、`internal/database` 连接池、`deploy/docker-compose.yaml`、`deploy/postgres/init.sql`
+- 还没有：gRPC proto、业务镜像；Commercial 逻辑尚未写
 - 一期进程目标：Gateway + User + Commercial（worker 可先同进程）；好友度 / 官职表并进 User，不拆独立 Member 进程
 - 二期再拆：Promotion、Recommend、Profile、AB、Risk
 
@@ -55,13 +55,13 @@ API Gateway  Gin :8080
 ## 本地基础设施
 
 ```bash
-cd deploy
-docker compose up -d
+make up
+# 等价：docker compose -f deploy/docker-compose.yaml up -d
 ```
 
 | 服务 | 地址 | 说明 |
 |------|------|------|
-| Postgres 15 | `localhost:5432` | 用户 `xnc`，库 `xncagent`，密码 `xnc123`（**仅本地演示，非生产**）；启动时执行 [`init.sql`](deploy/init.sql) |
+| Postgres 15 | `localhost:5432` | 用户 `xnc`，库 `xncagent`，密码 `xnc123`（**仅本地演示，非生产**）；启动时执行 [`init.sql`](deploy/postgres/init.sql) |
 | Redis 7 | `localhost:6379` | 扣款现场 |
 | Kafka | 宿主机 **9093**（容器内 9092） | Topic 规划见 v3.1；账本 `balance_events` |
 | Jaeger UI | `http://localhost:16686` | OTLP gRPC `:4317` |
@@ -71,36 +71,42 @@ docker compose up -d
 停止：
 
 ```bash
-cd deploy
-docker compose down
+make down
+# 等价：docker compose -f deploy/docker-compose.yaml down
 ```
+
+## 数据库文件放哪
+
+两类文件职责不同，不要混：
+
+| 你要做的事 | 放哪 |
+|------------|------|
+| 进程连 Postgres / Redis / Kafka（host、端口、密码） | [`configs/config.yaml`](configs/config.yaml) |
+| 用 Docker 拉起 Postgres / Redis / Kafka / Jaeger | [`deploy/docker-compose.yaml`](deploy/docker-compose.yaml)（即 golang-standards 的 `deployments/`） |
+| 一期库表 DDL（空数据卷首次执行） | [`deploy/postgres/init.sql`](deploy/postgres/init.sql) |
+
+Python 仓的 `xncagent/config/*.yaml` 对应本仓 `configs/`。compose 只放 Go 仓，不要复制到 Python 仓。
 
 ## 项目结构
 
+只列当前真实存在的路径。独立 `cmd/user` 等拆进程时再加。
+
 ```
 XNCAgent-go/
-├── cmd/
-│   ├── gateway/          # API Gateway（Gin :8080）
-│   ├── user/             # 用户服务
-│   └── commercial/       # 商业化服务（worker 一期可同进程）
+├── cmd/gateway/main.go          # 一期唯一进程，Gin :8080
 ├── internal/
-│   ├── middleware/       # 网关中间件
-│   ├── router/           # 网关路由
-│   ├── user/
-│   └── commercial/
-├── pkg/
-│   ├── errcode/          # 统一错误码
-│   ├── httpclient/       # 调 Python Agent 等
-│   ├── logger/
-│   └── response/         # 统一 JSON
-├── api/proto/            # gRPC Protobuf（待补）
-├── configs/              # 服务配置（待补）
+│   ├── config/config.go         # 读 configs/config.yaml
+│   ├── database/postgres.go     # GORM + 连接池
+│   ├── middleware/jwt.go        # 鉴权；白名单 /health、register、login
+│   └── user/                    # 注册 / 登录 / me（与 Gateway 同进程）
+├── pkg/response/response.go     # 统一 JSON 信封
+├── configs/config.yaml          # 进程配置：server / database / redis / kafka / jwt
 ├── deploy/
-│   ├── docker-compose.yaml
-│   └── init.sql
-├── docs/                 # 架构与落地计划
-├── tests/
-├── go.mod                # module github.com/JerryDtj/XNCAgent-go
+│   ├── docker-compose.yaml      # 启动基础设施
+│   └── postgres/init.sql        # 一期 7 张表
+├── docs/                        # 架构与落地计划
+├── Makefile                     # make up / down / run
+├── go.mod                       # module github.com/JerryDtj/XNCAgent-go
 └── README.md
 ```
 

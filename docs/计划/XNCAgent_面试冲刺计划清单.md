@@ -10,10 +10,10 @@
 | 仓库 | 职责 |
 |------|------|
 | `XNCAgent` | Python Agent：对话、RAG、MCP、Sandbox |
-| `XNCAgent-go` | Go：Gateway / User / Commercial；`deploy/docker-compose.yaml`、`deploy/init.sql` |
+| `XNCAgent-go` | Go：Gateway / User / Commercial；`deploy/docker-compose.yaml`、`deploy/postgres/init.sql` |
 
 - 本地 compose 在 **Go 仓**：Postgres 用户 `xnc`、库 `xncagent`；Kafka 宿主机端口 **9093**（容器内 9092）；Jaeger UI `16686`、OTLP gRPC `4317`
-- 一期表结构以 Go 仓 `init.sql` 为准（v3.1 一期），不含旧学习计划的 gift/ab 表
+- 一期表结构以 Go 仓 `deploy/postgres/init.sql` 为准（v3.1 一期），不含旧学习计划的 gift/ab 表
 
 ---
 
@@ -131,7 +131,7 @@ Week C (10.08-10.12): OTel、compose、文档与代码对齐
 
 | 日期 | 目标 | 当日结束必须有 |
 |------|------|----------------|
-| 9.22 一 | 充值幂等（表已在 `init.sql`） | 重复充值余额不变 |
+| 9.22 一 | 充值幂等（表已在 `deploy/postgres/init.sql`） | 重复充值余额不变 |
 | 9.23 二 | Redis Lua 预扣 | 并发两个预扣不超扣 |
 | 9.24 三 | Lua 结算 + 预扣 TTL 释放 | 预扣 10 结算 8 余额正确 |
 | 9.25 四 | 对话链路接入 Prehold/Settle | 一轮对话后流水完整 |

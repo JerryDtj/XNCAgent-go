@@ -1356,7 +1356,7 @@ CREATE TABLE frozen_records (
 
 **表用途**：记录所有积分相关的资金流动，由 Commercial-worker 从 Kafka 消费落库。是账务投影、幂等校验、三层对账的全部依据。
 
-**表定义**（一期 DDL 以 **Go 仓 `XNCAgent-go`** 的 `deploy/init.sql` 为准；二期表随服务拆出再补，不预建 AB/画像/独立商城表）：
+**表定义**（一期 DDL 以 **Go 仓 `XNCAgent-go`** 的 `deploy/postgres/init.sql` 为准；二期表随服务拆出再补，不预建 AB/画像/独立商城表）：
 
 ```sql
 CREATE TABLE transactions (

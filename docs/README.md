@@ -9,7 +9,7 @@
 | 文档 | 角色 |
 |------|------|
 | [XNCAgent_Go微服务架构设计文档-v3.1.md](./计划/XNCAgent_Go微服务架构设计文档-v3.1.md) | **Go 层权威设计**。网关、用户、会员官职、商业化（Redis 扣款 + Kafka 账本 + DB 投影）、营销、推荐、AB、画像、风控、与 Python Agent 的 SSE 契约、ADR。 |
-| [XNCAgent_面试冲刺计划清单.md](./计划/XNCAgent_面试冲刺计划清单.md) | 一期 / 二期落地清单。一期：Gateway + User + Commercial；compose 与 `init.sql` 以本仓为准。 |
+| [XNCAgent_面试冲刺计划清单.md](./计划/XNCAgent_面试冲刺计划清单.md) | 一期 / 二期落地清单。一期：Gateway + User + Commercial；compose 与 `deploy/postgres/init.sql` 以本仓为准。 |
 
 ## 架构
 
@@ -22,5 +22,5 @@
 ## 阅读时注意
 
 - **冲突以 v3.1 为准**。商业化计划里的独立商城、更多推荐触发（聊完 / 沉默 / 行为尖峰）、Java/SpEL 示例已被 v3.1 取代：无商城、活动入口合并进充值 preview、推荐仅登录与余额不足、规则用 YAML。
-- 一期表结构以 [`deploy/init.sql`](../deploy/init.sql) 为准，不含 gift / ab / 画像 / 独立商城。
+- 一期表结构以 [`deploy/postgres/init.sql`](../deploy/postgres/init.sql) 为准，不含 gift / ab / 画像 / 独立商城。
 - 本仓代码仍是骨架时，文档描述的是 **目标架构**，不要当成当前进程已经跑通。

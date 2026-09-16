@@ -1,0 +1,31 @@
+# 进程运行时配置（Gateway / 后续业务代码用 Viper 读取）。
+# 不是 Docker 启动文件：Postgres / Redis / Kafka 怎么拉起，看 deploy/docker-compose.yaml。
+# 密码 xnc123 仅本地演示，生产不要提交真实密钥。
+
+server:
+  port: 8080
+  cors_origins:
+    - http://localhost:5173
+    - http://127.0.0.1:5173
+
+database:
+  host: localhost
+  port: 5432
+  username: xnc
+  password: xnc123
+  dbname: xncagent
+  sslmode: disable       # 本地开发用 disable，生产环境按需改为 require/verify-full
+  timezone: Asia/Shanghai
+  max_open_conns: 25
+  max_idle_conns: 10
+  conn_max_lifetime: 30m
+
+redis:
+  addr: localhost:6379
+
+kafka:
+  brokers:
+    - localhost:9093     # 宿主机端口；容器内互访用 kafka:9092
+
+jwt:
+  secret: local-dev-only-not-for-production
