@@ -114,15 +114,15 @@ func (s *Service) consumeCode(email, code string) error {
 	return nil
 }
 
-func (s *Service) Register(email, password, code string) (*User, error) {
+func (s *Service) Register(email, password, code string) (*User, *TokenPair, error) {
 	email = normalizeEmail(email)
 	if err := s.consumeCode(email, strings.TrimSpace(code)); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	u := &User{
 		Email:        email,
@@ -145,10 +145,14 @@ func (s *Service) Register(email, password, code string) (*User, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	_ = s.rdb.Del(context.Background(), email).Err()
-	return u, nil
+	tokens, err := s.issueTokens(u.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return u, tokens, nil
 }
 
 func (s *Service) Login(email, password string) (*TokenPair, error) {

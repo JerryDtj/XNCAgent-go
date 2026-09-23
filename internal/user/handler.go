@@ -64,7 +64,7 @@ func (h *Handler) Register(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, 1, "请填写正确的邮箱、至少 8 位密码和 4 位数字验证码")
 		return
 	}
-	u, err := h.svc.Register(req.Email, req.Password, req.Code)
+	_, tokens, err := h.svc.Register(req.Email, req.Password, req.Code)
 	if err != nil {
 		if errors.Is(err, ErrEmailTaken) || errors.Is(err, ErrInvalidCode) || errors.Is(err, ErrCodeExpired) {
 			response.Fail(c, http.StatusBadRequest, 1, err.Error())
@@ -73,7 +73,7 @@ func (h *Handler) Register(c *gin.Context) {
 		response.Fail(c, http.StatusInternalServerError, 1, "注册失败")
 		return
 	}
-	response.OK(c, gin.H{"user_id": u.ID, "email": u.Email})
+	response.OK(c, tokens)
 }
 
 func (h *Handler) Login(c *gin.Context) {
