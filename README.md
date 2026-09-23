@@ -28,7 +28,7 @@ XNCAgent 是「小喜子」的专属 Agent 项目：一名戏精附体的赛博�
 Client (HTTP/JSON)
         │
         ▼
-API Gateway  Gin :8080
+API Gateway  Gin :8199
   JWT · RequestID · Rate Limit · Feature Flag · SSE 透传
         │
         ├── gRPC ──► User (:50051) / Commercial (:50053) / …
@@ -93,7 +93,7 @@ Python 仓的 `xncagent/config/*.yaml` 对应本仓 `configs/`。compose 只放 
 
 ```
 XNCAgent-go/
-├── cmd/gateway/main.go          # 一期唯一进程，Gin :8080
+├── cmd/gateway/main.go          # 一期唯一进程，Gin :8199
 ├── internal/
 │   ├── config/config.go         # 读 configs/config.yaml
 │   ├── database/postgres.go     # GORM + 连接池

@@ -62,6 +62,9 @@ func (h *Handler) Register(c *gin.Context) {
 	var req registerReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, http.StatusBadRequest, 1, "请填写正确的邮箱、至少 8 位密码和 4 位数字验证码")
+		return
+	}
+	u, err := h.svc.Register(req.Email, req.Password, req.Code)
 	if err != nil {
 		if errors.Is(err, ErrEmailTaken) || errors.Is(err, ErrInvalidCode) || errors.Is(err, ErrCodeExpired) {
 			response.Fail(c, http.StatusBadRequest, 1, err.Error())
@@ -77,6 +80,9 @@ func (h *Handler) Login(c *gin.Context) {
 	var req loginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, http.StatusBadRequest, 1, "请填写邮箱和密码")
+		return
+	}
+	tokens, err := h.svc.Login(req.Email, req.Password)
 	if err != nil {
 		if errors.Is(err, ErrInvalidCreds) || errors.Is(err, ErrUserBanned) {
 			response.Fail(c, http.StatusUnauthorized, 40101, err.Error())

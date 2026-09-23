@@ -3,10 +3,10 @@
 # 密码 xnc123 仅本地演示，生产不要提交真实密钥。
 
 server:
-  port: 8080
+  port: 8199
   cors_origins:
-    - http://localhost:5173
-    - http://127.0.0.1:5173
+    - http://localhost:8080
+    - http://127.0.0.1:8080
 
 database:
   host: localhost

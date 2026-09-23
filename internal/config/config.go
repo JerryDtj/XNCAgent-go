@@ -97,7 +97,7 @@ func Load() (*Config, error) {
 	v.AddConfigPath(".")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
-	v.SetDefault("server.port", 8080)
+	v.SetDefault("server.port", 8199)
 	v.SetDefault("redis.addr", "localhost:6379")
 	v.SetDefault("smtp.host", "smtp.163.com")
 	v.SetDefault("smtp.port", 465)
@@ -114,13 +114,13 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
 	if cfg.Server.Port == 0 {
-		cfg.Server.Port = 8080
+		cfg.Server.Port = 8199
 	}
 	if cfg.JWT.Secret == "" {
 		return nil, fmt.Errorf("jwt.secret is empty")
 	}
 	if len(cfg.Server.CORSOrigins) == 0 {
-		cfg.Server.CORSOrigins = []string{"http://localhost:5173", "http://127.0.0.1:5173"}
+		cfg.Server.CORSOrigins = []string{"http://localhost:8080", "http://127.0.0.1:8080"}
 	}
 	if cfg.Redis.Addr == "" {
 		cfg.Redis.Addr = "localhost:6379"
