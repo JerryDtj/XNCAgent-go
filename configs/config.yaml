@@ -22,6 +22,17 @@ database:
 
 redis:
   addr: localhost:6379
+  password: ""
+  db: 0
+
+# 163 邮箱 SMTP：登录网页邮箱 → 设置 → POP3/SMTP/IMAP → 开启 SMTP，
+# password 填「授权码」而不是登录密码。也可用环境变量 SMTP_USERNAME / SMTP_PASSWORD 覆盖。
+smtp:
+  host: smtp.163.com
+  port: 465
+  username: your_account@163.com
+  password: ""
+  from: jiao_snow@163.com
 
 kafka:
   brokers:

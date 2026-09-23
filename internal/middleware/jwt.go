@@ -18,9 +18,10 @@ type userClaims struct {
 
 func JWT(secret string) gin.HandlerFunc {
 	skip := map[string]struct{}{
-		"/health":                 {},
-		"/api/v1/users/register":  {},
-		"/api/v1/users/login":     {},
+		"/health":                  {},
+		"/api/v1/users/send-code":  {},
+		"/api/v1/users/register":   {},
+		"/api/v1/users/login":      {},
 	}
 	key := []byte(secret)
 	return func(c *gin.Context) {
@@ -34,7 +35,7 @@ func JWT(secret string) gin.HandlerFunc {
 		}
 		header := c.GetHeader("Authorization")
 		if !strings.HasPrefix(header, "Bearer ") {
-			response.Fail(c, http.StatusUnauthorized, 40101, "unauthorized")
+			response.Fail(c, http.StatusUnauthorized, 40101, "未登录或登录已过期")
 			c.Abort()
 			return
 		}
@@ -47,7 +48,7 @@ func JWT(secret string) gin.HandlerFunc {
 			return key, nil
 		})
 		if err != nil || !token.Valid || claims.UserID == 0 {
-			response.Fail(c, http.StatusUnauthorized, 40101, "unauthorized")
+			response.Fail(c, http.StatusUnauthorized, 40101, "未登录或登录已过期")
 			c.Abort()
 			return
 		}

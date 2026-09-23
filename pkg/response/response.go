@@ -23,7 +23,7 @@ func write(c *gin.Context, httpStatus, code int, msg string, data interface{}) {
 }
 
 func OK(c *gin.Context, data interface{}) {
-	write(c, http.StatusOK, 0, "ok", data)
+	write(c, http.StatusOK, 0, "成功", data)
 }
 
 func Fail(c *gin.Context, httpStatus, code int, msg string) {
