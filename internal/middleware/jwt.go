@@ -18,10 +18,9 @@ type userClaims struct {
 
 func JWT(secret string) gin.HandlerFunc {
 	skip := map[string]struct{}{
-		"/health":                  {},
-		"/api/v1/users/send-code":  {},
-		"/api/v1/users/register":   {},
-		"/api/v1/users/login":      {},
+		"/health":                 {},
+		"/api/v1/users/send-code": {},
+		"/api/v1/users/login":     {},
 	}
 	key := []byte(secret)
 	return func(c *gin.Context) {

@@ -7,7 +7,6 @@
 CREATE TABLE IF NOT EXISTS users (
     id BIGSERIAL PRIMARY KEY,
     email VARCHAR(100) NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
     phone VARCHAR(20),
     status VARCHAR(20) NOT NULL DEFAULT 'active',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -17,11 +16,10 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone ON users(phone) WHERE phone IS NOT NULL;
 
-COMMENT ON TABLE users IS '用户：邮箱登录，密码 bcrypt';
+COMMENT ON TABLE users IS '用户：一期邮箱验证码登录（未注册自动建号）；phone 预留给二期/三期短信登录';
 COMMENT ON COLUMN users.id IS '用户主键';
 COMMENT ON COLUMN users.email IS '登录邮箱，唯一';
-COMMENT ON COLUMN users.password_hash IS 'bcrypt，不存明文';
-COMMENT ON COLUMN users.phone IS '可选手机号，非空时唯一';
+COMMENT ON COLUMN users.phone IS '预留手机号，非空时唯一；二期/三期短信验证码登录用';
 COMMENT ON COLUMN users.status IS 'active / banned';
 COMMENT ON COLUMN users.created_at IS '创建时间';
 COMMENT ON COLUMN users.updated_at IS '更新时间';

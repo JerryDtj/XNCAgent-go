@@ -79,8 +79,8 @@ Week C     → Feature Flag、metrics、OTel → 一期收口
 
 | # | 功能 | 实现要点 | 验收 |
 |---|------|----------|------|
-| 4 | 注册 / 登录 | `POST /api/v1/users/register`、`POST /api/v1/users/login`；email + bcrypt；access 2h + refresh 7d；逻辑在 `internal/user` | 天计划三条 curl |
-| 5 | JWT 中间件 | 白名单：`/health`、`/api/v1/users/register`、`/api/v1/users/login`（refresh 若当天做也放行）。其余 Bearer。失败走统一 JSON 401 | 不带 token 401，带 token 200 |
+| 4 | 邮箱验证码登录 | `POST /api/v1/users/send-code`、`POST /api/v1/users/login`；邮箱 + 4 位验证码；未注册则自动建号；access 2h + refresh 7d；逻辑在 `internal/user` | 发码 → 登录拿 token |
+| 5 | JWT 中间件 | 白名单：`/health`、`/api/v1/users/send-code`、`/api/v1/users/login`（refresh 若当天做也放行）。其余 Bearer。失败走统一 JSON 401 | 不带 token 401，带 token 200 |
 | 6 | 端口配置 | 可用 Viper 读 `configs/config.yaml` 的 `port: 8199`；读失败仍默认 8199 | `go run ./cmd/gateway` 仍听 8199 |
 
 **不要**：`routes.yaml` 把 User 反代到 `localhost:8081`。一期没有独立 User 进程。

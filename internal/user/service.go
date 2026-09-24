@@ -14,7 +14,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -22,11 +21,10 @@ const (
 	accessTTL  = 2 * time.Hour
 	refreshTTL = 7 * 24 * time.Hour
 	codeTTL    = time.Hour
+	codeKeyFmt = "login_code:%s"
 )
 
 var (
-	ErrEmailTaken   = errors.New("该邮箱已注册")
-	ErrInvalidCreds = errors.New("邮箱或密码错误")
 	ErrUserBanned   = errors.New("账号已被封禁")
 	ErrUserNotFound = errors.New("用户不存在")
 	ErrInvalidCode  = errors.New("验证码错误")
@@ -59,23 +57,12 @@ func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
 
-func (s *Service) emailTaken(email string) (bool, error) {
-	var n int64
-	if err := s.db.Model(&User{}).Where("email = ?", email).Count(&n).Error; err != nil {
-		return false, err
-	}
-	return n > 0, nil
+func codeKey(email string) string {
+	return fmt.Sprintf(codeKeyFmt, email)
 }
 
-func (s *Service) SendRegisterCode(email string) error {
+func (s *Service) SendLoginCode(email string) error {
 	email = normalizeEmail(email)
-	taken, err := s.emailTaken(email)
-	if err != nil {
-		return err
-	}
-	if taken {
-		return ErrEmailTaken
-	}
 
 	n, err := rand.Int(rand.Reader, big.NewInt(10000))
 	if err != nil {
@@ -85,14 +72,14 @@ func (s *Service) SendRegisterCode(email string) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if err := s.rdb.Set(ctx, email, code, codeTTL).Err(); err != nil {
+	if err := s.rdb.Set(ctx, codeKey(email), code, codeTTL).Err(); err != nil {
 		return err
 	}
 
-	subject := "XNCAgent 注册验证码"
-	body := fmt.Sprintf("您的注册验证码是 %s，1 小时内有效。如果不是您本人操作，请忽略本邮件。", code)
+	subject := "XNCAgent 登录验证码"
+	body := fmt.Sprintf("您的登录验证码是 %s，1 小时内有效。未注册的邮箱验证成功后会自动开通账号。如果不是您本人操作，请忽略本邮件。", code)
 	if err := s.mailer.SendPlain(email, subject, body); err != nil {
-		_ = s.rdb.Del(context.Background(), email).Err()
+		_ = s.rdb.Del(context.Background(), codeKey(email)).Err()
 		return err
 	}
 	return nil
@@ -101,38 +88,54 @@ func (s *Service) SendRegisterCode(email string) error {
 func (s *Service) consumeCode(email, code string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	stored, err := s.rdb.Get(ctx, email).Result()
+	key := codeKey(email)
+	stored, err := s.rdb.Get(ctx, key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return ErrCodeExpired
 		}
 		return err
 	}
-	if subtle.ConstantTimeCompare([]byte(stored), []byte(code)) != 1 {
+	if subtle.ConstantTimeCompare([]byte(stored), []byte(strings.TrimSpace(code))) != 1 {
 		return ErrInvalidCode
 	}
+	_ = s.rdb.Del(ctx, key).Err()
 	return nil
 }
 
-func (s *Service) Register(email, password, code string) (*User, *TokenPair, error) {
+func (s *Service) LoginWithCode(email, code string) (*TokenPair, error) {
 	email = normalizeEmail(email)
-	if err := s.consumeCode(email, strings.TrimSpace(code)); err != nil {
-		return nil, nil, err
+	if err := s.consumeCode(email, code); err != nil {
+		return nil, err
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	var u User
+	err := s.db.Where("email = ?", email).First(&u).Error
 	if err != nil {
-		return nil, nil, err
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		created, createErr := s.createUser(email)
+		if createErr != nil {
+			return nil, createErr
+		}
+		u = *created
 	}
+	if u.Status == "banned" {
+		return nil, ErrUserBanned
+	}
+	return s.issueTokens(u.ID)
+}
+
+func (s *Service) createUser(email string) (*User, error) {
 	u := &User{
-		Email:        email,
-		PasswordHash: string(hash),
-		Status:       "active",
+		Email:  email,
+		Status: "active",
 	}
-	err = s.db.Transaction(func(tx *gorm.DB) error {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(u).Error; err != nil {
 			if errors.Is(err, gorm.ErrDuplicatedKey) {
-				return ErrEmailTaken
+				return gorm.ErrDuplicatedKey
 			}
 			return err
 		}
@@ -145,32 +148,16 @@ func (s *Service) Register(email, password, code string) (*User, *TokenPair, err
 		return nil
 	})
 	if err != nil {
-		return nil, nil, err
-	}
-	_ = s.rdb.Del(context.Background(), email).Err()
-	tokens, err := s.issueTokens(u.ID)
-	if err != nil {
-		return nil, nil, err
-	}
-	return u, tokens, nil
-}
-
-func (s *Service) Login(email, password string) (*TokenPair, error) {
-	email = normalizeEmail(email)
-	var u User
-	if err := s.db.Where("email = ?", email).First(&u).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrInvalidCreds
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			var existing User
+			if findErr := s.db.Where("email = ?", email).First(&existing).Error; findErr != nil {
+				return nil, findErr
+			}
+			return &existing, nil
 		}
 		return nil, err
 	}
-	if u.Status == "banned" {
-		return nil, ErrUserBanned
-	}
-	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
-		return nil, ErrInvalidCreds
-	}
-	return s.issueTokens(u.ID)
+	return u, nil
 }
 
 func (s *Service) GetByID(id int64) (*User, error) {

@@ -3,13 +3,12 @@ package user
 import "time"
 
 type User struct {
-	ID           int64     `gorm:"primaryKey"`
-	Email        string    `gorm:"size:100;uniqueIndex"`
-	PasswordHash string    `gorm:"column:password_hash"`
-	Phone        *string   `gorm:"size:20"`
-	Status       string    `gorm:"size:20"`
-	CreatedAt    time.Time `gorm:"autoCreateTime"`
-	UpdatedAt    time.Time `gorm:"autoUpdateTime"`
+	ID        int64     `gorm:"primaryKey"`
+	Email     string    `gorm:"size:100;uniqueIndex"`
+	Phone     *string   `gorm:"size:20"`
+	Status    string    `gorm:"size:20"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime"`
 }
 
 func (User) TableName() string { return "users" }
