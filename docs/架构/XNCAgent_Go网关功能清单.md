@@ -93,7 +93,7 @@ Week C     → Feature Flag、metrics、OTel → 一期收口
 
 | # | 功能 | 实现要点 | 验收 |
 |---|------|----------|------|
-| 7 | 反代 Agent | `POST /api/v1/agent/chat` → 本机 Python（如 `http://127.0.0.1:<python端口>`）。`httputil.ReverseProxy`；SSE 小 `FlushInterval`、禁止整段缓冲；透传 `Authorization` | `curl -N` 看到多行 `data:` |
+| 7 | 反代 Agent | `POST /api/v1/agent/chat` → 本机 Python（如 `http://127.0.0.1:<python端口>`）。`httputil.ReverseProxy`；SSE 小 `FlushInterval`、禁止整段缓冲。验签后把上下文中的 `user_id` 写成下游请求头 `X-User-Id`（十进制）；Python 用此头识别用户，不在 Agent 内再解 JWT。`Authorization` 可继续透传，身份以 `X-User-Id` 为准 | `curl -N` 看到多行 `data:`；下游请求带 `X-User-Id` |
 | 8 | SSE 超时 | 普通接口可 10s；**对话不设总超时**，仅空闲超时（如 60s 无数据才断） | 长连接不被 10s 掐断 |
 
 CORS：本周无前端，不做。访问日志：`gin.Default()` 足够，9.21 前不必 zap。
