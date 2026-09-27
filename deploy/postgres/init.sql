@@ -2,6 +2,7 @@
 -- 数据库: xncagent（compose 环境变量 POSTGRES_DB）
 -- 不含：gift/ab/画像/独立商城、chat_sessions、三层对账流水（二期再补）
 -- 本文件由 deploy/docker-compose.yaml 挂到 /docker-entrypoint-initdb.d/，仅空数据卷首次执行。
+-- 增加migrate_0003_chat_sessions.sql文件,来实现侧面聊天框,以及退出登录后的消息重建.
 
 -- 1. 用户
 CREATE TABLE IF NOT EXISTS users (

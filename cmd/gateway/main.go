@@ -7,6 +7,7 @@ import (
 	"github.com/JerryDtj/XNCAgent-go/internal/config"
 	"github.com/JerryDtj/XNCAgent-go/internal/database"
 	"github.com/JerryDtj/XNCAgent-go/internal/middleware"
+	"github.com/JerryDtj/XNCAgent-go/internal/proxy"
 	"github.com/JerryDtj/XNCAgent-go/internal/user"
 	"github.com/JerryDtj/XNCAgent-go/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -37,6 +38,11 @@ func main() {
 		response.OK(c, gin.H{"status": "up"})
 	})
 	user.RegisterRoutes(router, db, rdb, cfg.JWT.Secret, cfg.SMTP)
+	agentProxy, err := proxy.Agent("http://127.0.0.1:8000")
+	if err != nil {
+		log.Fatalf("agent proxy: %v", err)
+	}
+	router.Any("/agent/*path", agentProxy)
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	if err := router.Run(addr); err != nil {
