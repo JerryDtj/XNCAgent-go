@@ -12,7 +12,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U xnc"]
+      test: ["CMD-SHELL", "pg_isready -U xnc -d xncagent"]
       # 5秒检查一次
       interval: 5s
       timeout: 5s
