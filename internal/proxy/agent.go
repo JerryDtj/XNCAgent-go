@@ -7,7 +7,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/JerryDtj/XNCAgent-go/internal/middleware"
 	"github.com/JerryDtj/XNCAgent-go/pkg/response"
@@ -44,7 +43,7 @@ func Agent(rawTarget string) (gin.HandlerFunc, error) {
 		// fail-fast：取不到 user_id 说明 JWT 中间件没跑或上下文键不匹配，鉴权可能整个被跳过，绝不反代。
 		uid, ok := c.Get(middleware.ContextUserID)
 		userID, isNum := uid.(int64)
-		if !ok || isNum || userID < 0 {
+		if !ok || !isNum || userID <= 0 {
 			log.Printf("agent proxy missing user_id: %s %s", c.Request.Method, c.Request.URL.RequestURI())
 			response.Fail(c, http.StatusInternalServerError, 500, "网关内部错误")
 			c.Abort()
