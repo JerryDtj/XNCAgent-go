@@ -159,7 +159,7 @@ Request
 # 示例：9.20 再加，路径可写在代码里，不必先上 yaml
 agent:
   path: /api/v1/agent/chat
-  upstream: http://127.0.0.1:8000   # 以当时 Python 监听为准
+  upstream: http://127.0.0.1:18000   # 以当时 Python 监听为准
   sse: true
   timeout: 0s                       # 不设总超时，仅空闲超时
 ```

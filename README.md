@@ -50,7 +50,7 @@ API Gateway  Gin :8199
 
 - Go：以 [`go.mod`](go.mod) 为准（当前 `go 1.27.1`）
 - Docker Compose：仅拉起基础设施，**不含** Gateway / User / Commercial 业务镜像
-- Python Agent：在 [XNCAgent](https://github.com/JerryDtj/XNCAgent) 仓执行 `uv run start`，监听 `http://127.0.0.1:8000`；Gateway 把 `/agent/*` 原样转到该地址
+- Python Agent：在 [XNCAgent](https://github.com/JerryDtj/XNCAgent) 仓执行 `uv run start`，监听 `http://127.0.0.1:18000`；Gateway 把 `/agent/*` 原样转到该地址
 
 ## 本地基础设施
 

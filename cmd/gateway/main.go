@@ -38,7 +38,7 @@ func main() {
 		response.OK(c, gin.H{"status": "up"})
 	})
 	user.RegisterRoutes(router, db, rdb, cfg.JWT.Secret, cfg.SMTP)
-	agentProxy, err := proxy.Agent("http://127.0.0.1:8000")
+	agentProxy, err := proxy.Agent("http://127.0.0.1:18000")
 	if err != nil {
 		log.Fatalf("agent proxy: %v", err)
 	}
