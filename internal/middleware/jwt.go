@@ -21,6 +21,8 @@ func JWT(secret string) gin.HandlerFunc {
 		"/health":                 {},
 		"/api/v1/users/send-code": {},
 		"/api/v1/users/login":     {},
+		"/api/v1/users/refresh":   {},// 新增：refresh 只需要 cookie
+		"/api/v1/users/logout":    {},// 新增：access 可能已过期，也要能登出
 	}
 	key := []byte(secret)
 	return func(c *gin.Context) {

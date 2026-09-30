@@ -22,6 +22,7 @@ type Config struct {
 type ServerConfig struct {
 	Port        int      `mapstructure:"port"`
 	CORSOrigins []string `mapstructure:"cors_origins"`
+	CookieSecure bool     `mapstructure:"cookie_secure"`// 生产 HTTPS 置 true
 }
 
 type DatabaseConfig struct {

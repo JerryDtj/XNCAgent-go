@@ -14,15 +14,24 @@ import (
 )
 
 type Handler struct {
-	svc *Service
+	svc          *Service
+	cookieSecure bool
 }
 
-func RegisterRoutes(r *gin.Engine, db *gorm.DB, rdb *redis.Client, jwtSecret string, smtpCfg config.SMTPConfig) {
-	h := &Handler{svc: NewService(db, rdb, mail.NewSender(smtpCfg), jwtSecret)}
+const (
+	refreshCookieName   = "refresh_token"
+	refreshCookiePath   = "/api/v1/users" //覆盖/refresh和/logout
+	refreshCookieMaxAge = 7 * 24 * 3600   // 与 refreshTTL 一致
+)
+
+func RegisterRoutes(r *gin.Engine, db *gorm.DB, rdb *redis.Client, jwtSecret string, smtpCfg config.SMTPConfig, cookieSecure bool) {
+	h := &Handler{svc: NewService(db, rdb, mail.NewSender(smtpCfg), jwtSecret), cookieSecure: cookieSecure}
 	g := r.Group("/api/v1/users")
 	g.POST("/send-code", h.SendCode)
 	g.POST("/login", h.Login)
 	g.GET("/me", h.Me)
+	g.POST("/refresh", h.Refresh)
+	g.POST("/logout", h.Logout)
 }
 
 type sendCodeReq struct {
@@ -66,7 +75,11 @@ func (h *Handler) Login(c *gin.Context) {
 		response.Fail(c, http.StatusInternalServerError, 1, "登录失败")
 		return
 	}
-	response.OK(c, tokens)
+	h.setRefreshCookie(c, tokens.RefreshToken)
+	response.OK(c, gin.H{
+		"access_token": tokens.AccessToken,
+		"expires_in":   tokens.ExpiresIn,
+	})
 }
 
 func (h *Handler) Me(c *gin.Context) {
@@ -86,4 +99,50 @@ func (h *Handler) Me(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"user_id": u.ID, "email": u.Email})
+}
+
+func (h *Handler) Refresh(c *gin.Context) {
+	raw, err := c.Cookie(refreshCookieName)
+	if err != nil || raw == "" {
+		response.Fail(c, http.StatusUnauthorized, 40101, "未登录或登录已过期")
+		return
+	}
+	tokens, err := h.svc.RefreshToken(raw)
+	if err != nil {
+		h.clearRefreshCookie(c)
+		response.Fail(c, http.StatusUnauthorized, 40101, "未登录或登录已过期")
+		return
+	}
+	h.setRefreshCookie(c, tokens.RefreshToken)
+	response.OK(c, gin.H{
+		"access_token": tokens.AccessToken,
+		"expires_in":   tokens.ExpiresIn,
+	})
+}
+
+func (h *Handler) Logout(c *gin.Context) {
+	raw, _ := c.Cookie(refreshCookieName)
+	if raw != "" {
+		_ = h.svc.Logout(raw) // 失败不影响响应，保证幂等
+	}
+	h.clearRefreshCookie(c)
+	response.OK(c, nil)
+}
+
+func (h *Handler) setRefreshCookie(c *gin.Context, raw string) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(
+		refreshCookieName,
+		raw,
+		refreshCookieMaxAge,
+		refreshCookiePath, 
+		"", //domain 留空 = 当前域
+		h.cookieSecure, // 生产 HTTPS 置 true
+		true,           // httpOnly
+	)
+}
+
+func (h *Handler) clearRefreshCookie(c *gin.Context) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(refreshCookieName, "", -1, refreshCookiePath, "", h.cookieSecure, true)
 }

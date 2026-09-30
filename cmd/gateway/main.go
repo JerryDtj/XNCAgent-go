@@ -37,7 +37,7 @@ func main() {
 	router.GET("/health", func(c *gin.Context) {
 		response.OK(c, gin.H{"status": "up"})
 	})
-	user.RegisterRoutes(router, db, rdb, cfg.JWT.Secret, cfg.SMTP)
+	user.RegisterRoutes(router, db, rdb, cfg.JWT.Secret, cfg.SMTP, cfg.Server.CookieSecure)
 	agentProxy, err := proxy.Agent("http://127.0.0.1:18000")
 	if err != nil {
 		log.Fatalf("agent proxy: %v", err)

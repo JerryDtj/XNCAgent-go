@@ -25,10 +25,12 @@ const (
 )
 
 var (
-	ErrUserBanned   = errors.New("账号已被封禁")
-	ErrUserNotFound = errors.New("用户不存在")
-	ErrInvalidCode  = errors.New("验证码错误")
-	ErrCodeExpired  = errors.New("验证码已过期，请重新获取")
+	ErrUserBanned           = errors.New("账号已被封禁")
+	ErrUserNotFound         = errors.New("用户不存在")
+	ErrInvalidCode          = errors.New("验证码错误")
+	ErrCodeExpired          = errors.New("验证码已过期，请重新获取")
+	ErrRefreshTokenNotFound = errors.New("refresh token 不存在或已被吊销")
+	ErrRefreshTokenExpired  = errors.New("refresh token 已过期")
 )
 
 type Service struct {
@@ -124,7 +126,7 @@ func (s *Service) LoginWithCode(email, code string) (*TokenPair, error) {
 	if u.Status == "banned" {
 		return nil, ErrUserBanned
 	}
-	return s.issueTokens(u.ID)
+	return s.issueTokens(s.db, u.ID)
 }
 
 func (s *Service) createUser(email string) (*User, error) {
@@ -171,7 +173,8 @@ func (s *Service) GetByID(id int64) (*User, error) {
 	return &u, nil
 }
 
-func (s *Service) issueTokens(userID int64) (*TokenPair, error) {
+// 生成一个新的token(刷新+授权)
+func (s *Service) issueTokens(db *gorm.DB, userID int64) (*TokenPair, error) {
 	now := time.Now()
 	accessExpires := now.Add(accessTTL)
 	claims := Claims{
@@ -193,7 +196,7 @@ func (s *Service) issueTokens(userID int64) (*TokenPair, error) {
 		Token:     refresh,
 		ExpiresAt: now.Add(refreshTTL),
 	}
-	if err := s.db.Create(&row).Error; err != nil {
+	if err := db.Create(&row).Error; err != nil {
 		return nil, err
 	}
 	return &TokenPair{
@@ -201,4 +204,55 @@ func (s *Service) issueTokens(userID int64) (*TokenPair, error) {
 		RefreshToken: refresh,
 		ExpiresIn:    int64(accessTTL.Seconds()),
 	}, nil
+}
+
+// 刷新token(授权)
+func (s *Service) RefreshToken(rawToken string) (*TokenPair, error) {
+	rawToken = strings.TrimSpace(rawToken)
+	if rawToken == "" {
+		return nil, ErrRefreshTokenNotFound
+	}
+
+	var pair *TokenPair
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var row RefreshToken
+		if err := tx.Where("token = ?", rawToken).First(&row).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrRefreshTokenNotFound
+			}
+			return err
+		}
+		if time.Now().After(row.ExpiresAt) {
+			//过期的顺手清理掉,避免堆积
+			_ = tx.Delete(&RefreshToken{}, row.ID).Error
+			return ErrRefreshTokenExpired
+		}
+
+		res := tx.Where("token = ?", rawToken).Delete(&RefreshToken{})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			//同一个token的另一个refresh已经先删了
+			return ErrRefreshTokenNotFound
+		}
+		newPair, err := s.issueTokens(tx, row.UserID)
+		if err != nil {
+			return err
+		}
+		pair = newPair
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return pair, nil
+}
+
+func (s *Service) Logout(rawToken string) error {
+	rawToken = strings.TrimSpace(rawToken)
+	if rawToken == "" {
+		return nil
+	}
+	return s.db.Where("token = ?", rawToken).Delete(&RefreshToken{}).Error
 }

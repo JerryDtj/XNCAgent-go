@@ -7,6 +7,7 @@ server:
   cors_origins:
     - http://localhost:8080
     - http://127.0.0.1:8080
+  cookie_secure: false # 本地 http 开发 false；生产 HTTPS 改成 true
 
 database:
   host: localhost
