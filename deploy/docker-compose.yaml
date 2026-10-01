@@ -5,6 +5,7 @@ services:
     ports:
       - 5432:5432
     environment:
+      TZ: Asia/Shanghai
       POSTGRES_USER: xnc
       POSTGRES_PASSWORD: xnc123
       POSTGRES_DB: xncagent

@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(100) NOT NULL,
     phone VARCHAR(20),
     status VARCHAR(20) NOT NULL DEFAULT 'active',
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_users_email UNIQUE (email)
 );
 
@@ -30,8 +30,8 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token VARCHAR(255) NOT NULL,
-    expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_refresh_tokens_token UNIQUE (token)
 );
 
@@ -51,8 +51,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     total BIGINT NOT NULL DEFAULT 0,
     available BIGINT NOT NULL DEFAULT 0,
     frozen BIGINT NOT NULL DEFAULT 0,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_accounts_user_id UNIQUE (user_id),
     CONSTRAINT ck_accounts_non_negative CHECK (total >= 0 AND available >= 0 AND frozen >= 0)
 );
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS packages (
     price_cents BIGINT NOT NULL,
     token_amount BIGINT NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_packages_code UNIQUE (code)
 );
 
@@ -113,8 +113,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     frozen_before BIGINT NOT NULL DEFAULT 0,
     frozen_after BIGINT NOT NULL DEFAULT 0,
     description VARCHAR(255),
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_transactions_event_id UNIQUE (event_id),
     CONSTRAINT uq_transactions_idempotency UNIQUE (user_id, idempotency_key, type)
 );
@@ -150,10 +150,10 @@ CREATE TABLE IF NOT EXISTS user_intimacy (
     current_level INT NOT NULL DEFAULT 1,
     current_score INT NOT NULL DEFAULT 0,
     chat_count INT NOT NULL DEFAULT 0,
-    last_chat_at TIMESTAMP,
+    last_chat_at TIMESTAMPTZ,
     version INT NOT NULL DEFAULT 0,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_user_intimacy_user_id UNIQUE (user_id)
 );
 
@@ -175,7 +175,7 @@ COMMENT ON COLUMN user_intimacy.updated_at IS '最近更新时间';
 CREATE TABLE IF NOT EXISTS water_mark (
     partition_no INT PRIMARY KEY,
     max_offset BIGINT NOT NULL,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE water_mark IS 'balance_events 消费水位；提交位点在事务之后';

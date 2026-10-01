@@ -5,9 +5,9 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
     title VARCHAR(100) NOT NULL DEFAULT '',
     status VARCHAR(20) NOT NULL DEFAULT 'active',
     message_count INT NOT NULL DEFAULT 0,
-    last_message_at TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    last_message_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_time ON chat_sessions(user_id, last_message_at DESC);
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     degraded BOOLEAN NOT NULL DEFAULT FALSE,  -- 该轮是否走了 bge 降级通道
     emotion_alert BOOLEAN NOT NULL DEFAULT FALSE,
     token_count INT,                          -- 计费预留；流式结束拿到 usage 后回填 assistant 行
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_session_created ON chat_messages(session_id, created_at);
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS chat_session_summaries (
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     summary TEXT NOT NULL DEFAULT '',
     message_count INT NOT NULL DEFAULT 0,      -- 摘要已覆盖的消息数（进度标记）
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_chat_session_summaries_user ON chat_session_summaries(user_id);
