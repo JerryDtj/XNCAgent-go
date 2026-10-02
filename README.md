@@ -15,7 +15,7 @@ XNCAgent 是「小喜子」的专属 Agent 项目：一名戏精附体的赛博�
 
 本仓目前是 **一期骨架 + 本地基础设施**：
 
-- 已有：`GET /health`、邮箱验证码登录 JWT（未注册自动建号）、**refresh token httpOnly Cookie 登录态**（7 天有效、`/refresh` 旋转、`/logout` 删库吊销）、**`/agent/*` 反代透传 SSE 并注入 `X-User-Id`**、CORS、统一 JSON 信封、`internal/database` 连接池、`deploy/docker-compose.yaml`、`deploy/postgres/init.sql` + migrate_0002–0004
+- 已有：`GET /health`、邮箱验证码登录 JWT（未注册自动建号）、**refresh token httpOnly Cookie 登录态**（7 天有效、`/refresh` 旋转、`/logout` 删库吊销）、**`/agent/*` 反代透传 SSE 并注入 `X-User-Id`**、CORS、统一 JSON 信封、`internal/database` 连接池、`deploy/docker-compose.yaml`、`deploy/postgres/init.sql` + migrate_0002–0006
 - 还没有：Commercial 账务逻辑（Lua 预扣/结算/Kafka，方案已冻结）、gRPC 拆进程、业务镜像（一期 Gateway 单进程）
 - 一期进程目标：Gateway + User + Commercial（worker 可先同进程）；好友度 / 官职表并进 User，不拆独立 Member 进程
 - 二期再拆：Promotion、Recommend、Profile、AB、Risk
@@ -66,7 +66,7 @@ make up
 | Kafka | 宿主机 **9093**（容器内 9092） | Topic 规划见 v3.1；账本 `balance_events` |
 | Jaeger UI | `http://localhost:16686` | OTLP gRPC `:4317` |
 
-一期表：Go 域 `users`、`refresh_tokens`、`accounts`、`packages`（体验包 / 月卡 / 年卡）、`transactions`、`user_intimacy`、`water_mark`；Agent 域 `chat_sessions`、`chat_messages`、`chat_session_summaries`（migrate_0003，Python 独占读写）。不含 gift / ab / 独立商城 / 三层对账流水（二期再补）。
+一期表：Go 域 `users`、`refresh_tokens`、`accounts`、`packages`（体验包 / 月卡 / 年卡）、`transactions`、`user_intimacy`、`water_mark`；Agent 域 `chat_sessions`、`chat_messages`、`chat_session_summaries`（migrate_0003）、`user_settings`（migrate_0006，Python 独占读写）。不含 gift / ab / 独立商城 / 三层对账流水（二期再补）。
 
 停止：
 
@@ -84,7 +84,7 @@ make down
 | 进程连 Postgres / Redis / Kafka（host、端口、密码） | [`configs/config.yaml`](configs/config.yaml) |
 | 用 Docker 拉起 Postgres / Redis / Kafka / Jaeger | [`deploy/docker-compose.yaml`](deploy/docker-compose.yaml)（即 golang-standards 的 `deployments/`） |
 | 一期库表 DDL（空数据卷首次执行） | [`deploy/postgres/init.sql`](deploy/postgres/init.sql) |
-| 已有库增量变更 | [`migrate_0002`](deploy/postgres/migrate_0002_email_code_login.sql)（邮箱登录）、[`migrate_0003`](deploy/postgres/migrate_0003_chat_sessions.sql)（会话/消息/摘要三表）、[`migrate_0004`](deploy/postgres/migrate_0004_timestamptz.sql)（TIMESTAMPTZ 与时区修正） |
+| 已有库增量变更 | [`migrate_0002`](deploy/postgres/migrate_0002_email_code_login.sql)（邮箱登录）、[`migrate_0003`](deploy/postgres/migrate_0003_chat_sessions.sql)（会话/消息/摘要三表）、[`migrate_0004`](deploy/postgres/migrate_0004_timestamptz.sql)（TIMESTAMPTZ 与时区修正）、[`migrate_0005_message_interrupted`](deploy/postgres/migrate_0005_message_interrupted.sql)（SSE 断连残篇落库）、[`migrate_0006_user_settings`](deploy/postgres/migrate_0006_user_settings.sql)（用户设置表） |
 
 Python 仓的 `xncagent/config/*.yaml` 对应本仓 `configs/`。compose 只放 Go 仓，不要复制到 Python 仓。
 
