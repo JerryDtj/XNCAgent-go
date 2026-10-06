@@ -13,6 +13,10 @@ import (
 
 type BillingService interface {
 	Prehold(ctx context.Context, userID int64, amount int64, requestId string) (uuid.UUID, bool, error)
+	// SettleUser 按用户批量结算:驱动表是 usage(有真实 token 才结算);
+	// 每批 limit 条一个事务,锁一次账户,批内逐笔搬钱、逐笔写新流水,
+	// 批末一次写回账户并自检不变式。返回本批条数(0 = 无待结算)。
+	SettleUser(ctx context.Context, userID int64, limit int) (int, error)
 }
 
 type billingService struct {
@@ -119,4 +123,143 @@ func (s *billingService) Prehold(ctx context.Context, userID int64, amount int64
 	})
 
 	return preholdID, reused, err
+}
+
+// SettleUser 结算一个用户本批未结算用量(见接口注释)。
+// 锁顺序:usage 无锁读 → accounts 行锁 → preholds CAS,全局一致。
+func (s *billingService) SettleUser(ctx context.Context, userID int64, limit int) (int, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	processed := 0
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// ① 锁账户,快照取到 running 变量;此后 acct 不再作为数值来源
+		var acct user.Account
+		if e := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("user_id = ?", userID).First(&acct).Error; e != nil {
+			return e
+		}
+		runTotal, runAvailable, runFrozen := acct.Total, acct.Available, acct.Frozen
+
+		// ② 捞本批未结算用量。没有 usage 行的 pending prehold 是崩溃残留,
+		//    归 Sweeper 管,这里不碰
+		var rows []struct {
+			ID               int64
+			PreholdID        uuid.UUID
+			Model            string
+			PromptTokens     int `gorm:"column:prompt_tokens"`
+			CompletionTokens int `gorm:"column:completion_tokens"`
+		}
+		if e := tx.Table("usage").
+			Select("id, prehold_id, model, prompt_tokens, completion_tokens").
+			Where("user_id = ? AND settled = false", userID).
+			Order("id ASC").Limit(limit).
+			Scan(&rows).Error; e != nil {
+			return e
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+
+		// ③ 流水起点序号:账户锁已把同用户操作串行化,MAX 稳定
+		var maxSeq int64
+		if e := tx.Model(&Transaction{}).Where("user_id = ?", userID).
+			Select("COALESCE(MAX(seq_no), 0)").Scan(&maxSeq).Error; e != nil {
+			return e
+		}
+
+		for i, row := range rows {
+			var ph PreholdModel
+			if e := tx.Where("id = ?", row.PreholdID).First(&ph).Error; e != nil {
+				return e
+			}
+			if ph.Status == "settled" {
+				// 资金已结过(历史残留),只补置标,不动钱
+				if e := tx.Table("usage").Where("id = ?", row.ID).
+					Update("settled", true).Error; e != nil {
+					return e
+				}
+				processed++
+				continue
+			}
+			cost := costOf(row.Model, row.PromptTokens, row.CompletionTokens)
+			txType := "SETTLE"
+			held := min(runFrozen, ph.Amount) // 从冻结里只拿本笔的钱
+			desc := "按实耗结算"
+			if ph.Status == "released" {
+				// Sweeper 已退冻结:成本全额从 available 直扣
+				held = 0
+				txType = "RECONCILE_FIX"
+				desc = "预扣已释放,成本补扣"
+			}
+			// 快照:上一笔 after 就是这一笔 before
+			totalBefore, frozenBefore := runTotal, runFrozen
+			runTotal -= cost
+			runFrozen -= held
+			runAvailable -= (cost - held) // 多退少补,可为负(透支)
+
+			ps := ph.ID.String()
+			if e := tx.Create(&Transaction{
+				EventID:        "st:" + ps, // 由预扣 id 派生,天然唯一
+				SeqNo:          maxSeq + int64(i) + 1,
+				UserID:         userID,
+				PreholdID:      &ps,
+				IdempotencyKey: "sys:" + ps,
+				FlowVersion:    2,
+				Type:           txType,
+				Status:         "COMPLETED",
+				Amount:         -cost, // 流水约定正增负减
+				BalanceBefore:  totalBefore,
+				BalanceAfter:   runTotal,
+				FrozenBefore:   frozenBefore,
+				FrozenAfter:    runFrozen,
+				Description:    &desc,
+			}).Error; e != nil {
+				return e
+			}
+			// CAS 才是权威:只有仍 pending 才允许落成 settled;
+			// 0 行 = 读完状态后被改过(理论上账户锁已排除,防御),回滚整批下轮重试。
+			// released 分支不在这里:Sweeper 释放是既成事实,保持 released 不变
+			if txType == "SETTLE" {
+				res := tx.Model(&PreholdModel{}).
+					Where("id = ? AND status = 'pending'", row.PreholdID).
+					Updates(map[string]interface{}{"status": "settled", "settled_at": time.Now()})
+				if res.Error != nil {
+					return res.Error
+				}
+				if res.RowsAffected == 0 {
+					return errors.New("预扣状态在结算中途被修改")
+				}
+			}
+			if e := tx.Table("usage").Where("id = ?", row.ID).
+				Update("settled", true).Error; e != nil {
+				return e
+			}
+			processed++
+		}
+
+		// ④ 不变式自检:不过就回滚,钱不允许错着落库
+		if runTotal != runAvailable+runFrozen || runTotal < 0 {
+			return errors.New("结算后账户不变式破坏")
+		}
+		// ⑤ 批末一次写回账户
+		if e := tx.Model(&user.Account{}).Where("user_id = ?", userID).
+			Updates(map[string]interface{}{
+				"total":     runTotal,
+				"available": runAvailable,
+				"frozen":    runFrozen,
+			}).Error; e != nil {
+			return e
+		}
+		return nil
+	})
+	return processed, err
+}
+
+// costOf 实耗计价(分)。v1 硬编码费率卡(§2 样本: rate_p=100, rate_c=200,
+// 单位分/百万 token),TODO: 随 Estimator 迁入 config.yaml 的 billing.rates
+func costOf(model string, promptTokens, completionTokens int) int64 {
+	const rateP, rateC = 100, 200 // 分/百万 token
+	t := int64(promptTokens)*rateP + int64(completionTokens)*rateC
+	return (t + 999_999) / 1_000_000 // ceil,全程整数
 }

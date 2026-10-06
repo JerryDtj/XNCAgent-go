@@ -222,3 +222,131 @@ func TestPrehold_Errors(t *testing.T) {
 		t.Fatalf("失败请求不该动余额: %+v", acct)
 	}
 }
+
+// ---- SettleUser 用例 ----
+
+// 上报一条 usage → SettleUser:多退(预 10 实 1),断言余额/流水/prehold 状态/usage 置标
+func TestSettleUser_Normal(t *testing.T) {
+	svc := NewService(testDB)
+	uid := seedUser(t, 100)
+
+	phID, _, err := svc.Prehold(context.Background(), uid, 10, "req-s1")
+	if err != nil {
+		t.Fatalf("预扣失败: %v", err)
+	}
+	// Python 侧上报:真实样本 prompt 1906 / completion 234 → cost = 1 分
+	if err := testDB.Exec(`INSERT INTO usage (prehold_id, user_id, model, prompt_tokens, completion_tokens)
+		VALUES (?, ?, 'deepseek-chat', 1906, 234)`, phID.String(), uid).Error; err != nil {
+		t.Fatalf("插 usage 失败: %v", err)
+	}
+
+	n, err := svc.SettleUser(context.Background(), uid, 10)
+	if err != nil {
+		t.Fatalf("结算失败: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("应结算 1 条, got %d", n)
+	}
+
+	acct := loadAccount(t, uid)
+	// 预 10 实 1:total 99,冻结全退,available 回到 99
+	if acct.Total != 99 || acct.Available != 99 || acct.Frozen != 0 {
+		t.Fatalf("余额不对: %+v, want total=99 available=99 frozen=0", acct)
+	}
+
+	txs := loadTransactions(t, uid)
+	if len(txs) != 2 {
+		t.Fatalf("应有 PREHOLD+SETTLE 两条流水, got %d", len(txs))
+	}
+	st := txs[1]
+	if st.Type != "SETTLE" || st.Amount != -1 {
+		t.Fatalf("SETTLE 流水类型/金额不对: %+v", st)
+	}
+	if st.BalanceBefore != 100 || st.BalanceAfter != 99 || st.FrozenBefore != 10 || st.FrozenAfter != 0 {
+		t.Fatalf("SETTLE 快照不对: %+v", st)
+	}
+	if st.PreholdID == nil || *st.PreholdID != phID.String() {
+		t.Fatalf("SETTLE 没挂 prehold_id: %+v", st)
+	}
+
+	var ph PreholdModel
+	if err := testDB.Where("id = ?", phID).First(&ph).Error; err != nil {
+		t.Fatalf("查 prehold 失败: %v", err)
+	}
+	if ph.Status != "settled" {
+		t.Fatalf("prehold 应 settled, got %s", ph.Status)
+	}
+	var settled bool
+	if err := testDB.Table("usage").Select("settled").Where("prehold_id = ?", phID).Scan(&settled).Error; err != nil {
+		t.Fatalf("查 usage 失败: %v", err)
+	}
+	if !settled {
+		t.Fatal("usage 应已置标")
+	}
+}
+
+// 重复结算:第二轮返回 0,余额和流水纹丝不动
+func TestSettleUser_ReplayZero(t *testing.T) {
+	svc := NewService(testDB)
+	uid := seedUser(t, 100)
+
+	phID, _, _ := svc.Prehold(context.Background(), uid, 10, "req-s2")
+	testDB.Exec(`INSERT INTO usage (prehold_id, user_id, model, prompt_tokens, completion_tokens)
+		VALUES (?, ?, 'deepseek-chat', 1906, 234)`, phID.String(), uid)
+	if _, err := svc.SettleUser(context.Background(), uid, 10); err != nil {
+		t.Fatalf("首轮结算失败: %v", err)
+	}
+
+	n, err := svc.SettleUser(context.Background(), uid, 10)
+	if err != nil {
+		t.Fatalf("二轮结算不应报错: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("二轮应返回 0, got %d", n)
+	}
+	acct := loadAccount(t, uid)
+	if acct.Total != 99 || acct.Available != 99 || acct.Frozen != 0 {
+		t.Fatalf("二轮不该动余额: %+v", acct)
+	}
+	if cnt := len(loadTransactions(t, uid)); cnt != 2 {
+		t.Fatalf("二轮不该写流水, got %d 条", cnt)
+	}
+}
+
+// Sweeper 先释放 → 结算走 RECONCILE_FIX:冻结不退,成本全额从 available 扣
+func TestSettleUser_ReleasedReconcile(t *testing.T) {
+	svc := NewService(testDB)
+	uid := seedUser(t, 100)
+
+	phID, _, _ := svc.Prehold(context.Background(), uid, 10, "req-s3")
+	// 模拟 Sweeper 已释放(退回 10 分):available 90 → 100, frozen 10 → 0
+	if err := testDB.Exec(`UPDATE accounts SET available = available + 10, frozen = frozen - 10 WHERE user_id = ?`, uid).Error; err != nil {
+		t.Fatalf("模拟释放失败: %v", err)
+	}
+	if err := testDB.Model(&PreholdModel{}).Where("id = ?", phID).
+		Update("status", "released").Error; err != nil {
+		t.Fatalf("改 prehold 状态失败: %v", err)
+	}
+	// 真实成本 20 分(completion 100000 × 200/百万)
+	testDB.Exec(`INSERT INTO usage (prehold_id, user_id, model, prompt_tokens, completion_tokens)
+		VALUES (?, ?, 'deepseek-chat', 0, 100000)`, phID.String(), uid)
+
+	n, err := svc.SettleUser(context.Background(), uid, 10)
+	if err != nil {
+		t.Fatalf("结算失败: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("应结算 1 条, got %d", n)
+	}
+
+	acct := loadAccount(t, uid)
+	// total 100-20=80,available 100-20=80,frozen 保持 0
+	if acct.Total != 80 || acct.Available != 80 || acct.Frozen != 0 {
+		t.Fatalf("RECONCILE_FIX 余额不对: %+v, want 80/80/0", acct)
+	}
+	txs := loadTransactions(t, uid)
+	fix := txs[len(txs)-1]
+	if fix.Type != "RECONCILE_FIX" || fix.Amount != -20 {
+		t.Fatalf("应有 RECONCILE_FIX 流水 -20: %+v", fix)
+	}
+}

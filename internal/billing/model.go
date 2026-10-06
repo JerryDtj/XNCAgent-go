@@ -1,6 +1,7 @@
 package billing
 
 import (
+	"encoding/json"
 	"time"
 	"uuid"
 )
@@ -41,4 +42,22 @@ type Transaction struct {
 
 func (Transaction) TableName() string {
 	return "transactions"
+}
+
+type Usage struct {
+	ID               uint64    `gorm:"primaryKey"`
+	PreholdID        uuid.UUID `gorm:"type:uuid;uniqueIndex:uq_usage_prehold"`
+	UserID           int64
+	MessageID        int64
+	Model            string `gorm:"type:text"`
+	PromptTokens     int32
+	CompletionTokens int32
+	CacheMeta        json.RawMessage `gorm:"type:jsonb;default:'{}'"`
+	Estimated        bool
+	Settled          bool
+	CreatedAt        time.Time `gorm:"default:now()"`
+}
+
+func (Usage) TableName() string {
+	return "usage"
 }
