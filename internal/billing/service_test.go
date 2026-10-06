@@ -350,3 +350,47 @@ func TestSettleUser_ReleasedReconcile(t *testing.T) {
 		t.Fatalf("应有 RECONCILE_FIX 流水 -20: %+v", fix)
 	}
 }
+
+// 一批多条:验证快照链连续性(上一笔 after = 下一笔 before)和批量写
+func TestSettleUser_BatchChain(t *testing.T) {
+	svc := NewService(testDB)
+	uid := seedUser(t, 100)
+
+	ph1, _, _ := svc.Prehold(context.Background(), uid, 10, "req-b1")
+	ph2, _, _ := svc.Prehold(context.Background(), uid, 10, "req-b2")
+	// 两笔用量:第一笔 cost=1(多退),第二笔 cost=20(少补)
+	testDB.Exec(`INSERT INTO usage (prehold_id, user_id, model, prompt_tokens, completion_tokens)
+		VALUES (?, ?, 'deepseek-chat', 1906, 234)`, ph1.String(), uid)
+	testDB.Exec(`INSERT INTO usage (prehold_id, user_id, model, prompt_tokens, completion_tokens)
+		VALUES (?, ?, 'deepseek-chat', 0, 100000)`, ph2.String(), uid)
+
+	n, err := svc.SettleUser(context.Background(), uid, 10)
+	if err != nil {
+		t.Fatalf("结算失败: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("应结算 2 条, got %d", n)
+	}
+
+	acct := loadAccount(t, uid)
+	if acct.Total != 79 || acct.Available != 79 || acct.Frozen != 0 {
+		t.Fatalf("余额不对: %+v, want total=79 available=79 frozen=0", acct)
+	}
+
+	txs := loadTransactions(t, uid)
+	if len(txs) != 4 { // 2 PREHOLD + 2 SETTLE
+		t.Fatalf("应有 4 条流水, got %d", len(txs))
+	}
+	s1, s2 := txs[2], txs[3]
+	if s1.Amount != -1 || s2.Amount != -20 {
+		t.Fatalf("两笔金额应为 -1/-20: %+v %+v", s1, s2)
+	}
+	// 快照链:第一笔 after = 第二笔 before(按 seq_no 排序后相邻)
+	if s1.BalanceAfter != s2.BalanceBefore || s1.FrozenAfter != s2.FrozenBefore {
+		t.Fatalf("快照链断裂: s1.after=(%d,%d) s2.before=(%d,%d)",
+			s1.BalanceAfter, s1.FrozenAfter, s2.BalanceBefore, s2.FrozenBefore)
+	}
+	if s1.SeqNo+1 != s2.SeqNo {
+		t.Fatalf("seq_no 应连续: %d -> %d", s1.SeqNo, s2.SeqNo)
+	}
+}
