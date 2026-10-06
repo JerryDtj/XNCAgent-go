@@ -25,7 +25,7 @@ func NewSender(cfg config.SMTPConfig) *Sender {
 
 func (s *Sender) SendPlain(to, subject, body string) error {
 	if s.cfg.Username == "" || s.cfg.Password == "" {
-		return fmt.Errorf("smtp credentials are empty")
+		return fmt.Errorf("SMTP 账号或密码为空")
 	}
 	from := s.cfg.From
 	if from == "" {
@@ -47,36 +47,36 @@ func (s *Sender) SendPlain(to, subject, body string) error {
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
 	conn, err := tls.DialWithDialer(dialer, "tcp", addr, tlsCfg)
 	if err != nil {
-		return fmt.Errorf("dial smtp: %w", err)
+		return fmt.Errorf("连接 SMTP 失败: %w", err)
 	}
 	defer conn.Close()
 
 	client, err := smtp.NewClient(conn, s.cfg.Host)
 	if err != nil {
-		return fmt.Errorf("smtp client: %w", err)
+		return fmt.Errorf("创建 SMTP 客户端失败: %w", err)
 	}
 	defer client.Close()
 
 	auth := smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, s.cfg.Host)
 	if err := client.Auth(auth); err != nil {
-		return fmt.Errorf("smtp auth: %w", err)
+		return fmt.Errorf("SMTP 认证失败: %w", err)
 	}
 	if err := client.Mail(from); err != nil {
-		return fmt.Errorf("smtp mail from: %w", err)
+		return fmt.Errorf("设置发件人失败: %w", err)
 	}
 	if err := client.Rcpt(to); err != nil {
-		return fmt.Errorf("smtp rcpt: %w", err)
+		return fmt.Errorf("设置收件人失败: %w", err)
 	}
 	w, err := client.Data()
 	if err != nil {
-		return fmt.Errorf("smtp data: %w", err)
+		return fmt.Errorf("写入邮件正文失败: %w", err)
 	}
 	if _, err := w.Write([]byte(header.String())); err != nil {
 		_ = w.Close()
-		return fmt.Errorf("smtp write: %w", err)
+		return fmt.Errorf("发送邮件内容失败: %w", err)
 	}
 	if err := w.Close(); err != nil {
-		return fmt.Errorf("smtp close data: %w", err)
+		return fmt.Errorf("结束邮件正文失败: %w", err)
 	}
 	return client.Quit()
 }

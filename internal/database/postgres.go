@@ -17,14 +17,15 @@ func Open(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		TranslateError: true,
+		Logger:         newZhLogger(),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("open postgres: %w", err)
+		return nil, fmt.Errorf("连接 PostgreSQL 失败: %w", err)
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, fmt.Errorf("sql db: %w", err)
+		return nil, fmt.Errorf("获取数据库连接失败: %w", err)
 	}
 
 	maxOpen := cfg.MaxOpenConns
@@ -45,7 +46,7 @@ func Open(cfg config.DatabaseConfig) (*gorm.DB, error) {
 
 	if err := sqlDB.Ping(); err != nil {
 		_ = sqlDB.Close()
-		return nil, fmt.Errorf("ping postgres: %w", err)
+		return nil, fmt.Errorf("PostgreSQL 探活失败: %w", err)
 	}
 	return db, nil
 }

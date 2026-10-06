@@ -19,7 +19,7 @@ func OpenRedis(cfg config.RedisConfig) (*redis.Client, error) {
 	defer cancel()
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		_ = rdb.Close()
-		return nil, fmt.Errorf("ping redis: %w", err)
+		return nil, fmt.Errorf("Redis 探活失败: %w", err)
 	}
 	return rdb, nil
 }

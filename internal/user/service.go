@@ -29,8 +29,8 @@ var (
 	ErrUserNotFound         = errors.New("用户不存在")
 	ErrInvalidCode          = errors.New("验证码错误")
 	ErrCodeExpired          = errors.New("验证码已过期，请重新获取")
-	ErrRefreshTokenNotFound = errors.New("refresh token 不存在或已被吊销")
-	ErrRefreshTokenExpired  = errors.New("refresh token 已过期")
+	ErrRefreshTokenNotFound = errors.New("刷新令牌不存在或已被吊销")
+	ErrRefreshTokenExpired  = errors.New("刷新令牌已过期")
 )
 
 type Service struct {

@@ -20,9 +20,9 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Port        int      `mapstructure:"port"`
-	CORSOrigins []string `mapstructure:"cors_origins"`
-	CookieSecure bool     `mapstructure:"cookie_secure"`// 生产 HTTPS 置 true
+	Port         int      `mapstructure:"port"`
+	CORSOrigins  []string `mapstructure:"cors_origins"`
+	CookieSecure bool     `mapstructure:"cookie_secure"` // 生产 HTTPS 置 true
 }
 
 type DatabaseConfig struct {
@@ -107,18 +107,18 @@ func Load() (*Config, error) {
 	_ = v.BindEnv("smtp.from", "SMTP_FROM")
 
 	if err := v.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("read configs/config.yaml: %w", err)
+		return nil, fmt.Errorf("读取配置文件 configs/config.yaml 失败: %w", err)
 	}
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
-		return nil, fmt.Errorf("unmarshal config: %w", err)
+		return nil, fmt.Errorf("解析配置失败: %w", err)
 	}
 	if cfg.Server.Port == 0 {
 		cfg.Server.Port = 8199
 	}
 	if cfg.JWT.Secret == "" {
-		return nil, fmt.Errorf("jwt.secret is empty")
+		return nil, fmt.Errorf("jwt.secret 为空")
 	}
 	if len(cfg.Server.CORSOrigins) == 0 {
 		cfg.Server.CORSOrigins = []string{"http://localhost:8080", "http://127.0.0.1:8080"}

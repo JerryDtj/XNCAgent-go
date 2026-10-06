@@ -16,6 +16,9 @@ import (
 // HeaderUserID 是下游 Python agent 识别用户的请求头。
 const HeaderUserID = "X-User-Id"
 
+// HeaderPreholdID 是下游 Python agent 识别预扣 ID 的请求头,由前端每次提问生成
+const HeaderPreholdID = "X-Prehold-Id"
+
 // Agent 把 /agent/* 原样转到 Python agent。
 // 不改路径、不读 body；Authorization、Content-Type 等头随请求带过去。
 // 客户端自带的 X-User-Id 一律丢弃，只写 JWT 中间件解出来的用户 ID。
@@ -26,7 +29,7 @@ func Agent(rawTarget string) (gin.HandlerFunc, error) {
 		return nil, err
 	}
 	if upstream.Scheme == "" || upstream.Host == "" {
-		return nil, fmt.Errorf("agent proxy target must be an absolute URL")
+		return nil, fmt.Errorf("Agent 代理目标必须是绝对地址")
 	}
 	reverse := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
@@ -35,8 +38,8 @@ func Agent(rawTarget string) (gin.HandlerFunc, error) {
 		},
 		FlushInterval: -1,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-			log.Printf("agent proxy %s %s: %v", r.Method, r.URL.RequestURI(), err)
-			http.Error(w, "agent upstream unavailable", http.StatusBadGateway)
+			log.Printf("Agent 代理失败 %s %s: %v", r.Method, r.URL.RequestURI(), err)
+			http.Error(w, "Agent 上游不可用", http.StatusBadGateway)
 		},
 	}
 	return func(c *gin.Context) {
@@ -44,7 +47,7 @@ func Agent(rawTarget string) (gin.HandlerFunc, error) {
 		uid, ok := c.Get(middleware.ContextUserID)
 		userID, isNum := uid.(int64)
 		if !ok || !isNum || userID <= 0 {
-			log.Printf("agent proxy missing user_id: %s %s", c.Request.Method, c.Request.URL.RequestURI())
+			log.Printf("Agent 代理缺少用户 ID: %s %s", c.Request.Method, c.Request.URL.RequestURI())
 			response.Fail(c, http.StatusInternalServerError, 500, "网关内部错误")
 			c.Abort()
 			return
