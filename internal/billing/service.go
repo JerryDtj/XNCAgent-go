@@ -17,6 +17,8 @@ type BillingService interface {
 	// 每批 limit 条一个事务:一次捞出、内存逐笔算完、流水/预扣/用量/账户各写一次。
 	// 返回本批条数(0 = 无待结算)。
 	SettleUser(ctx context.Context, userID int64, limit int) (int, error)
+
+	Release(ctx context.Context, userID int64, limit int) (int, error)
 }
 
 type billingService struct {
@@ -30,6 +32,7 @@ func NewService(db *gorm.DB) BillingService {
 var ErrInsufficientBalance = errors.New("系统预测到您的账户余额可能不支持下次提问,请充值")
 var ErrBalanceExhausted = errors.New("账户余额不足")
 
+// Prehold 预扣积分
 func (s *billingService) Prehold(ctx context.Context, userID int64, amount int64, requestId string) (uuid.UUID, bool, error) {
 	preholdID := uuid.New()
 	reused := false
@@ -273,4 +276,123 @@ func costOf(model string, promptTokens, completionTokens int) int64 {
 	const rateP, rateC = 100, 200 // 分/百万 token
 	t := int64(promptTokens)*rateP + int64(completionTokens)*rateC
 	return (t + 999_999) / 1_000_000 // ceil,全程整数
+}
+
+// Release 释放预扣
+// 释放掉那些已经被扣掉预扣,但是在规定时间内没有得到usage响应的数据,防止预扣锁死
+func (s *billingService) Release(ctx context.Context, userID int64, limit int) (int, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	processed := 0
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		//锁账户
+		var acct user.Account
+		if e := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("user_id = ?", userID).First(&acct).Error; e != nil {
+			return e
+		}
+		runAvailable, runFrozen := acct.Available, acct.Frozen
+
+		//捞出本批
+		type releaseRow struct {
+			PreholdID uuid.UUID `gorm:"column:prehold_id"`
+			Amount    int64     `gorm:"column:amount"`
+		}
+		var rows []releaseRow
+		subQuery := tx.Model(&Usage{}).
+			Select("1").
+			Where("usage.prehold_id = p.id")
+		if e := tx.Table("preholds AS p").
+			Select("p.id as prehold_id, p.user_id as id, p.amount, p.status").
+			Where("p.status = 'pending' AND p.expires_at < now() and p.user_id = ?", userID).
+			Where("NOT EXISTS (?)", subQuery).
+			Order("p.created_at ASC").Limit(limit).
+			Scan(&rows).Error; e != nil {
+			return e
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+
+		//获取流水最大id,准备构造流水对象
+		var maxSeq int64
+		if e := tx.Model(&Transaction{}).Where("user_id = ?", userID).
+			Select("COALESCE(MAX(seq_no), 0)").Scan(&maxSeq).Error; e != nil {
+			return e
+		}
+
+		//构造流水
+		releaseDesc := "释放没有得到回应的预扣"
+		txRows := make([]Transaction, 0, len(rows))
+		pendingIDs := make([]uuid.UUID, 0, len(rows))
+		for _, row := range rows {
+			txType := "CANCEL"
+			desc := &releaseDesc
+			frozenBefore := runFrozen
+			runFrozen -= row.Amount
+			runAvailable += row.Amount // 释放死锁金额
+			maxSeq++
+			ps := row.PreholdID.String()
+			txRows = append(txRows, Transaction{
+				EventID:        "rl:" + ps,
+				SeqNo:          maxSeq,
+				UserID:         userID,
+				PreholdID:      &ps,
+				IdempotencyKey: "sys:" + ps,
+				FlowVersion:    2,
+				Type:           txType,
+				Status:         "COMPLETED",
+				Amount:         row.Amount, // 补回预扣,不动余额
+				BalanceBefore:  acct.Total,
+				BalanceAfter:   acct.Total,
+				FrozenBefore:   frozenBefore,
+				FrozenAfter:    runFrozen,
+				Description:    desc,
+			})
+			pendingIDs = append(pendingIDs, row.PreholdID)
+		}
+
+		//开始自检 total == available + frozen 且 frozen >= 0
+		// ④ 不过就回滚,钱不允许错着落库。total = available + frozen,且 total 不为负
+		if acct.Total != runAvailable+runFrozen || runFrozen < 0 {
+			return errors.New("释放兜底失败,账户不变式破坏")
+		}
+
+		//写流水
+		if len(txRows) > 0 {
+			if e := tx.CreateInBatches(&txRows, 1000).Error; e != nil {
+				return e
+			}
+		}
+		//cas检查数量是否有人改动过,数量不对就直接回滚
+		if len(pendingIDs) > 0 {
+			res := tx.Model(&PreholdModel{}).
+				Where("id IN ? AND status = 'pending'", pendingIDs).
+				Updates(map[string]interface{}{"status": "released"})
+			if res.Error != nil {
+				return res.Error
+			}
+			if res.RowsAffected != int64(len(pendingIDs)) {
+				return errors.New("预扣状态在释放中途被修改")
+			}
+		}
+		//回写账户
+		if len(txRows) > 0 {
+			if e := tx.Model(&user.Account{}).Where("user_id = ?", userID).
+				Updates(map[string]interface{}{
+					"total":     acct.Total,
+					"available": runAvailable,
+					"frozen":    runFrozen,
+				}).Error; e != nil {
+				return e
+			}
+		}
+		processed = len(rows)
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return processed, nil
 }

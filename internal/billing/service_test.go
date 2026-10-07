@@ -394,3 +394,70 @@ func TestSettleUser_BatchChain(t *testing.T) {
 		t.Fatalf("seq_no 应连续: %d -> %d", s1.SeqNo, s2.SeqNo)
 	}
 }
+
+// ---- Release 用例 ----
+
+// 预扣过期且没有 usage 上报 → Release 退回冻结:余额复原、CANCEL 流水快照对、prehold 置 released
+func TestReleaseUser_TTL(t *testing.T) {
+	svc := NewService(testDB)
+	uid := seedUser(t, 100)
+
+	phID, _, err := svc.Prehold(context.Background(), uid, 20, "req-r1")
+	if err != nil {
+		t.Fatalf("预扣失败: %v", err)
+	}
+	// 模拟超时:过期时间拨到 1 分钟前,且始终没有 usage 上报
+	if err := testDB.Exec(`UPDATE preholds SET expires_at = now() - interval '1 minute' WHERE id = ?`, phID.String()).Error; err != nil {
+		t.Fatalf("拨过期时间失败: %v", err)
+	}
+
+	n, err := svc.Release(context.Background(), uid, 10)
+	if err != nil {
+		t.Fatalf("释放失败: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("应释放 1 条, got %d", n)
+	}
+
+	acct := loadAccount(t, uid)
+	// 释放不动 total,冻结全额退回 available
+	if acct.Total != 100 || acct.Available != 100 || acct.Frozen != 0 {
+		t.Fatalf("余额不对: %+v, want total=100 available=100 frozen=0", acct)
+	}
+
+	txs := loadTransactions(t, uid)
+	if len(txs) != 2 {
+		t.Fatalf("应有 PREHOLD+CANCEL 两条流水, got %d", len(txs))
+	}
+	cx := txs[1]
+	if cx.Type != "CANCEL" || cx.Amount != 20 {
+		t.Fatalf("CANCEL 流水类型/金额不对: %+v", cx)
+	}
+	// 释放不动 total,所以 balance before == after;frozen 20 → 0
+	if cx.BalanceBefore != 100 || cx.BalanceAfter != 100 || cx.FrozenBefore != 20 || cx.FrozenAfter != 0 {
+		t.Fatalf("CANCEL 快照不对: %+v", cx)
+	}
+	if cx.PreholdID == nil || *cx.PreholdID != phID.String() {
+		t.Fatalf("CANCEL 没挂 prehold_id: %+v", cx)
+	}
+
+	var ph PreholdModel
+	if err := testDB.Where("id = ?", phID).First(&ph).Error; err != nil {
+		t.Fatalf("查 prehold 失败: %v", err)
+	}
+	if ph.Status != "released" {
+		t.Fatalf("prehold 应 released, got %s", ph.Status)
+	}
+
+	// 重放:第二轮应返回 0,余额和流水纹丝不动
+	n, err = svc.Release(context.Background(), uid, 10)
+	if err != nil {
+		t.Fatalf("二轮释放不应报错: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("二轮应返回 0, got %d", n)
+	}
+	if cnt := len(loadTransactions(t, uid)); cnt != 2 {
+		t.Fatalf("二轮不该写流水, got %d 条", cnt)
+	}
+}
